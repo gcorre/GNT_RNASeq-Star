@@ -1,0 +1,8 @@
+name: rnaseq_star
+channels : 
+ - bioconda
+ - defaults
+dependencies:
+ - star=2.7.*
+ - subread=2.0.*
+ - samtools=1.*
