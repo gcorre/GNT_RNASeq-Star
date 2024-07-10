@@ -5,9 +5,21 @@
 
 #### WORKFLOW
 
-# snakemake -s /home/gcorre/projets/omics/RNAseq/pipeline/rnaseq_star.snakemake -k -j 12  --use-conda --conda-prefix /home/gcorre/projets/omics/RNAseq/ --conda-frontend mamba
-
-
+# snakemake -s /home/marine/RNASeq/Pipelines/rnaseq_star.snakemake -k -j 12  --use-conda --conda-prefix  /home/marine/RNASeq/Conda_env --conda-frontend mamba
+## RNASEQ folder
+#    | pipelines
+#       - rnaseq_star.snakemake   -> the workflow
+#       - rnaseq_star.yaml        -> the environment conda file
+#       - rnaseq_star_config.yaml -> template for configuration file (copy in each analysis folder)
+#    | conda_env                    --> where snakemake will create the conda environment. Use this path in the snakemake command argument "--conda-prefix"
+#    | folder 1
+#       - R1.fastq.gz
+#       - R2.fastq.gz
+#       - rnaseq_star_config.yaml  --> file with path to reference genome and annotation GTF file
+#    | folder 2
+#       - R1.fastq.gz
+#       - R2.fastq.gz
+#       - rnaseq_star_config.yaml  --> file with path to reference genome and annotation GTF file
 
 configfile: "rnaseq_star_config.yaml"
 
@@ -75,6 +87,7 @@ rule fastqc:
         input: r1=getr1, r2=getr2
         output : r1= "{NAME}/{NAME}_R1_fastqc.zip", r2="{NAME}/{NAME}_R2_fastqc.zip"
         threads : 8
+        conda : "rnaseq_star.yaml"
         shell : """
                 fastqc -t {threads} {input}
                 """
