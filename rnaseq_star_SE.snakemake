@@ -5,7 +5,7 @@
 
 #### WORKFLOW
 
-# snakemake -s /home/marine/RNASeq/Pipelines/rnaseq_star.snakemake -k -j 12  --use-conda --conda-prefix  /home/marine/RNASeq/Conda_env --conda-frontend mamba
+# snakemake -s /home/marine/RNASeq/Pipelines/rnaseq_star.snakemake -k -j 12 --use-conda --conda-prefix  /home/marine/RNASeq/Conda_env --conda-frontend mamba
 ## RNASEQ folder
 #    | pipelines
 #       - rnaseq_star.snakemake   -> the workflow
@@ -30,16 +30,12 @@ import os;
 import re;
 from glob import glob;
 
-FILES = glob("*R1*.fastq.gz")
+FILES = glob("*001*.fastq.gz")
 SAMPLES = [re.sub('_R[0-9].+$','',w) for w in FILES];
 print(SAMPLES);
 
 def getr1(wildcards):
-  return glob(wildcards.NAME +"_R1*.fastq.gz")
-
-def getr2(wildcards):
-  return glob(wildcards.NAME + "_R2*.fastq.gz")
-
+  return glob(wildcards.NAME +"_001.fastq.gz")
 
 
 rule all:
@@ -48,7 +44,7 @@ rule all:
 
 
 rule genome_mapping:
-        input : r1=getr1, r2=getr2, idx = STARindex
+        input : r1=getr1, idx = STARindex
         output : mapped="{NAME}/RefAlign/{NAME}_genomeAligned.out.bam"
         threads : 12
         log : "{NAME}/RefAlign/logs/{NAME}_genome_alignment.log"
@@ -57,7 +53,7 @@ rule genome_mapping:
                 
                 mkdir -p /tmp/STAR/
                 [[ -d /tmp/STAR/{wildcards.NAME} ]] && rm -r /tmp/STAR/{wildcards.NAME}
-                STAR --runMode alignReads --runThreadN {threads} --outTmpDir /tmp/STAR/{wildcards.NAME} --readFilesCommand zcat --genomeLoad NoSharedMemory --genomeDir {input.idx}  --outSAMattributes All --outSAMtype BAM Unsorted --outSAMmultNmax 5 --outFileNamePrefix {wildcards.NAME}/RefAlign/{wildcards.NAME}_genome --readFilesIn {input.r1} {input.r2} > {log}
+                STAR --runMode alignReads --runThreadN {threads} --outTmpDir /tmp/STAR/{wildcards.NAME} --readFilesCommand zcat --genomeLoad NoSharedMemory --genomeDir {input.idx}  --outSAMattributes All --outSAMtype BAM Unsorted --outSAMmultNmax 5 --outFileNamePrefix {wildcards.NAME}/RefAlign/{wildcards.NAME}_genome --readFilesIn {input.r1} > {log}
                 """
 
 rule sort:
@@ -79,13 +75,13 @@ rule feature_count:
         conda : "rnaseq_star.yaml"
         log : "{NAME}/FeatureCount/{NAME}_FeatureCount.log"
         shell :  """
-                featureCounts -a {ANNOT} -p -B -s 0 -o {output} {input} -C --primary --extraAttributes gene_name -J -T {threads} --tmpDir /tmp/STAR 2> {log}
+                featureCounts -a {ANNOT} -B -s 0 -o {output} {input} --primary --extraAttributes gene_name -J -T {threads} --tmpDir /tmp/STAR 2> {log}
                 """
 
 
 rule fastqc:
-        input: r1=getr1, r2=getr2
-        output : r1= "{NAME}/{NAME}_R1_fastqc.zip", r2="{NAME}/{NAME}_R2_fastqc.zip"
+        input: r1=getr1
+        output : r1= "{NAME}/{NAME}_R1_fastqc.zip"
         threads : 8
         conda : "rnaseq_star.yaml"
         shell : """

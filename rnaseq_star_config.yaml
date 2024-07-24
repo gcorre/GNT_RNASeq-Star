@@ -1,4 +1,22 @@
+paired:
+  "false"
 STARindex:
   "/media/DATA/omics_references/mouse/ENSEMBL/GRCm39/index/star"
 ANNOT:
  "/media/DATA/omics_references/mouse/ENSEMBL/GRCm39/gtf/gencode.vM35.primary_assembly.annotation.gtf"
+
+
+#If necessary, adjust options for FeatureCount 
+
+# -B (requireBothEndsMapped)
+# -M (countMultiMappingReads) If specified, multi-mapping reads/fragments will be counted.
+# -O (allowMultiOverlap) Reads/fragments overlapping with more than one meta-feature/feature will be counted more than once
+# -p (isPairedEnd)
+# -s 0,1,2 (isStrandSpecific) Possible values include: 0 (unstranded), 1 (stranded) and 2 (reversely stranded). Default value is 0 (ie. unstranded read counting carried out for all input files). For paired-end reads, strand of the first read is taken as the strand of the whole fragment.
+# −−countReadPairs Read pairs will be counted instead of reads. This parameter is only applicable when paired-end data were provided.
+#
+featureCount_pe_params:  #for paired-end reads
+ "-B -p -s 0 -C --primary --countReadPairs"
+
+featureCount_se_params: #for single-end reads
+ "-C --primary -s 0"

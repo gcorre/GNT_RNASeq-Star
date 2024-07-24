@@ -6,3 +6,4 @@ dependencies:
  - star=2.7.*
  - subread=2.0.*
  - samtools=1.*
+ - fastqc=1.11.9

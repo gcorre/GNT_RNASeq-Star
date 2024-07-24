@@ -1,0 +1,139 @@
+###
+# Corre G. @ GENETHON
+# RNAseq alignment and counting
+# Alignment with STAR
+
+
+#All paths in the snakefile are interpreted relative to the directory snakemake is executed in. This behaviour can be overridden by specifying a workdir in the snakefile:
+workdir: "./" 
+
+#### WORKFLOW 
+
+# snakemake -s ../00-pipeline/rnaseq_star.snakemake -k -j 12  --use-conda --conda-prefix  ../01-envs --conda-frontend mamba
+
+## RNASEQ folder
+#    | 00-pipelines
+#       - rnaseq_star.snakemake   -> the workflow
+#       - rnaseq_star.yaml        -> the environment conda file
+#       - rnaseq_star_config.yaml -> template for configuration file (copy in each analysis folder)
+#    | 01-envs                    --> where snakemake will create the conda environment. Use this path in the snakemake command argument "--conda-prefix"
+#    | folder 1
+#       - R1.fastq.gz
+#       - R2.fastq.gz
+#       - rnaseq_star_config.yaml  --> file with path to reference genome and annotation GTF file
+#    | folder 2
+#       - R1.fastq.gz
+#       - R2.fastq.gz
+#       - rnaseq_star_config.yaml  --> file with path to reference genome and annotation GTF file
+
+configfile: "rnaseq_star_config.yaml"
+
+STARindex=config["STARindex"]
+ANNOT=config["ANNOT"]
+
+import os;
+import re;
+from glob import glob;
+
+FILES = glob("*R1*.fastq.gz")
+SAMPLES = [re.sub('_R[0-9].+$','',w) for w in FILES];
+print(SAMPLES);
+
+def getr1(wildcards):
+  return glob(wildcards.NAME +"_R1*.fastq.gz")
+
+def getr2(wildcards):
+  return glob(wildcards.NAME + "_R2*.fastq.gz")
+
+
+
+rule all:
+  input: expand("{sample}/FeatureCount/{sample}_counts.txt",sample=SAMPLES),
+   expand("{sample}/{sample}_R1_fastqc.zip",sample=SAMPLES)
+
+
+if config["paired"] == "true":
+
+        rule genome_mapping_pe:
+                input : r1=getr1, r2=getr2, idx = STARindex
+                output : mapped="{NAME}/RefAlign/{NAME}_genomeAligned.out.bam"
+                threads : 12
+                log : "{NAME}/RefAlign/logs/{NAME}_genome_alignment.log"
+                conda : "../01-envs/rnaseq_star.yaml"
+                shell : """
+                        
+                        mkdir -p /tmp/STAR/
+                        [[ -d /tmp/STAR/{wildcards.NAME} ]] && rm -r /tmp/STAR/{wildcards.NAME}
+                        STAR --runMode alignReads --runThreadN {threads} --outTmpDir /tmp/STAR/{wildcards.NAME} --readFilesCommand zcat --genomeLoad NoSharedMemory --genomeDir {input.idx}  --outSAMattributes All --outSAMtype BAM Unsorted --outSAMmultNmax 5 --outFileNamePrefix {wildcards.NAME}/RefAlign/{wildcards.NAME}_genome --readFilesIn {input.r1} {input.r2} > {log}
+                        """
+
+else:
+        rule genome_mapping_se:
+                input : r1=getr1, idx = STARindex
+                output : mapped="{NAME}/RefAlign/{NAME}_genomeAligned.out.bam"
+                threads : 12
+                log : "{NAME}/RefAlign/logs/{NAME}_genome_alignment.log"
+                conda : "../01-envs/rnaseq_star.yaml"
+                shell : """
+                        
+                        mkdir -p /tmp/STAR/
+                        [[ -d /tmp/STAR/{wildcards.NAME} ]] && rm -r /tmp/STAR/{wildcards.NAME}
+                        STAR --runMode alignReads --runThreadN {threads} --outTmpDir /tmp/STAR/{wildcards.NAME} --readFilesCommand zcat --genomeLoad NoSharedMemory --genomeDir {input.idx}  --outSAMattributes All --outSAMtype BAM Unsorted --outSAMmultNmax 5 --outFileNamePrefix {wildcards.NAME}/RefAlign/{wildcards.NAME}_genome --readFilesIn {input.r1}  > {log}
+                        """
+
+rule sort:
+        input : "{NAME}/RefAlign/{NAME}_genomeAligned.out.bam"
+        output : "{NAME}/RefAlign/{NAME}_genomeAligned.out.sorted.bam"
+        threads : 12
+        conda : "../01-envs/rnaseq_star.yaml"
+        shell : """
+                samtools sort -@ {threads} {input} > {output}
+                """
+
+### OPTIONS FOR FEATURECOUNT
+# -B (requireBothEndsMapped)
+# -M (countMultiMappingReads) If specified, multi-mapping reads/fragments will be counted.
+# -O (allowMultiOverlap) Reads/fragments overlapping with more than one meta-feature/feature will be counted more than once
+# -p (isPairedEnd)
+# -s 0,1,2 (isStrandSpecific) Possible values include: 0 (unstranded), 1 (stranded) and 2 (reversely stranded). Default value is 0 (ie. unstranded read counting carried out for all input files). For paired-end reads, strand of the first read is taken as the strand of the whole fragment.
+# −−countReadPairs Read pairs will be counted instead of reads. This parameter is only applicable when paired-end data were provided.
+#
+
+if config["paired"] == "true":
+
+        rule feature_count_pe:
+                input : rules.sort.output
+                output : "{NAME}/FeatureCount/{NAME}_counts.txt"
+                threads : 12
+                conda : "../01-envs/rnaseq_star.yaml"
+                log : "{NAME}/FeatureCount/{NAME}_FeatureCount.log"
+                params : config["featureCount_pe_params"]
+                shell :  """
+                        featureCounts {params} -a {ANNOT} -o {output} {input} --extraAttributes gene_name -J -T {threads} --tmpDir /tmp/STAR 2> {log}
+                        """
+else:
+        rule feature_count_se:
+                input : rules.sort.output
+                output : "{NAME}/FeatureCount/{NAME}_counts.txt"
+                threads : 12
+                conda : "../01-envs/rnaseq_star.yaml"
+                log : "{NAME}/FeatureCount/{NAME}_FeatureCount.log"
+                params : config["featureCount_se_params"]
+                shell :  """
+                        featureCounts  {params} -a {ANNOT}  -o {output} {input} --extraAttributes gene_name -J -T {threads} --tmpDir /tmp/STAR 2> {log}
+                        """
+
+
+rule fastqc:
+        input: r1=getr1, r2=getr2
+        output : r1= "{NAME}/{NAME}_R1_fastqc.zip", r2="{NAME}/{NAME}_R2_fastqc.zip"
+        threads : 8
+        conda : "../01-envs/rnaseq_star.yaml"
+        shell : """
+                fastqc -t {threads} {input}
+                """
+
+onsuccess:
+    shell("cowsay  'Oh my God, it worked !!'")
+onerror:
+    shell("cowsay -f moose 'Houston, we have a problem !!'")
